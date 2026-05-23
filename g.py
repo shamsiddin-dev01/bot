@@ -302,3 +302,93 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+    import asyncio
+import threading
+import sys
+import logging
+from flask import Flask
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+
+# 1. LOGGING (Serverda xatoliklarni kuzatish uchun)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# 2. FLASK SOZLAMALARI (Render portni eshitishi va o'chib qolmasligi uchun)
+# Nomini 'flask_app' qildik, botning 'app' obyekti bilan urishmasligi uchun
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return "Bot ishlamoqda... 🚀"
+
+def run_flask():
+    """Flask'ni Render portida (10000) alohida oqimda ishga tushirish"""
+    try:
+        # Render avtomat port beradi yoki logingizdagi 10000 portdan foydalanadi
+        flask_app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Flask serverda xatolik: {e}")
+
+# 3. TELEGRAM BOT BUYRUQLARI (Handlers)
+# Bu yerga o'zingizning eski kodingizdagi funksiyalarni joylashtirishingiz mumkin
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/start buyrug'i kelganda javob berish"""
+    await update.message.reply_text("Assalomu alaykum! Bot muvaffaqiyatli ishga tushdi. 🤖")
+
+# 4. BOT OB'EKTINI YARATISH
+# BOT_TOKEN o'rniga o'zingizning haqiqiy tokeningizni yozing
+BOT_TOKEN = "SESH_YERGA_BOT_TOKENINI_YOZING"
+app = Application.builder().token(BOT_TOKEN).build()
+
+# Buyruqlarni ro'yxatga olish
+app.add_handler(CommandHandler("start", start_command))
+
+# 5. ASINXRON ISHGA TUSHIRISH (Python 3.14 xatoligini tuzatuvchi qism)
+async def main_async():
+    """Botni yangi asinxron event loop ichida ishga tushirish va ushlab turish"""
+    await app.initialize()
+    await app.updater.start_polling(drop_pending_updates=True)
+    await app.start()
+    print("✅ Bot asinxron tarzda muvaffaqiyatli ishga tushdi!")
+    
+    # Render server botni o'chirib qo'ymasligi uchun cheksiz kutish sikli
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        print("Bot to'xtatilmoqda...")
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+
+def main():
+    """Asosiy ishga tushirish nuqtasi"""
+    # Windows operatsion tizimi uchun xavfsizlik chorasi
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    # 1-QADAM: Flask serverni fonda (Thread ichida) ishga tushiramiz
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True  # Asosiy dastur yopilsa, Flask ham yopiladi
+    flask_thread.start()
+    print("🌍 Flask server fonda ishga tushirildi...")
+
+    # 2-QADAM: Toza asinxron event loop yaratamiz va botni yurgizamiz
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        loop.run_until_complete(main_async())
+    except KeyboardInterrupt:
+        print("Dastur to'xtatildi.")
+    finally:
+        loop.close()
+
+if __name__ == '__main__':
+    main()
