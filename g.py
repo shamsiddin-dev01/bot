@@ -1,14 +1,18 @@
 import os
 import logging
 import random
-import asyncio  # Xatolikni tuzatish uchun qo'shildi
+import asyncio
 from threading import Thread
-from flask import Flask  # UptimeRobot uchun
+import nest_asyncio  # Yangi muhitlarda event loop xatoligini oldini olish uchun
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, filters, ContextTypes
 )
+
+# Render va Python 3.14+ uchun event loopni faollashtiramiz
+nest_asyncio.apply()
 
 # --- UPTIME ROBOT UCHUN KICHIK VEB SERVER ---
 app_flask = Flask('')
@@ -18,8 +22,10 @@ def home():
     return "Bot tirik va ishlamoqda!"
 
 def run():
-    port = int(os.environ.get("PORT", 8080))
-    app_flask.run(host='0.0.0.0', port=port)
+    # Render taqdim etadigan portni olamiz
+    port = int(os.environ.get("PORT", 10000))
+    # Werkzeug serverini asinxron oqimga xalaqit bermasligi uchun threaded=True qilamiz
+    app_flask.run(host='0.0.0.0', port=port, threaded=True)
 
 def keep_alive():
     t = Thread(target=run)
@@ -35,7 +41,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# So'zlar va testlar ma'lumotlar bazasi (O'zgarishsiz qoldi)
+# So'zlar ro'yxati (kategoriyalar bo'yicha)
 WORDS = {
     "Kundalik hayot": [
         {"uz": "non", "en": "bread", "example": "I eat bread every morning."},
@@ -261,11 +267,14 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot bilan faqat tugmalar orqali muloqot qiling! 👇\n/start ni bosing", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]))
 
-
-# --- ASINXRON MAIN FUNKSIYA (Xatolik tuzatilgan qismi) ---
-async def main():
+# --- TUZATILGAN RUN_POLLING INTEGRATSIYASI ---
+def main():
     # Kichik veb serverni alohida oqimda ko'taramiz
     keep_alive()
+    
+    # Asosiy loop (sikl)ni Render/Python muhitiga moslab yaratamiz
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
     # Bot ilovasini quramiz
     app = Application.builder().token(BOT_TOKEN).build()
@@ -288,15 +297,8 @@ async def main():
     
     print("✅ Bot muvaffaqiyatli ishga tushdi!")
     
-    # Asinxron ishga tushirish qismlari
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling(drop_pending_updates=True)
-    
-    # Renderda bot o'chib qolmasligi uchun asinxron cheksiz sikl
-    while True:
-        await asyncio.sleep(3600)
+    # run_polling endi xatosiz yangi siklda ishlaydi
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    # Kodni asinxron ishga tushirish
-    asyncio.run(main())
+    main()
