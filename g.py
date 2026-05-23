@@ -1,11 +1,12 @@
+import os
 import logging
 import random
 from threading import Thread
-from flask import Flask  # UptimeRobot uchun kerak
+from flask import Flask  # UptimeRobot uchun
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, filters, ContextTypes, ConversationHandler
+    MessageHandler, filters, ContextTypes
 )
 
 # --- UPTIME ROBOT UCHUN KICHIK VEB SERVER ---
@@ -16,17 +17,25 @@ def home():
     return "Bot tirik va ishlamoqda!"
 
 def run():
-    app_flask.run(host='0.0.0.0', port=8080)
+    # Render, Replit yoki boshqa hostinglar uchun portni avtomatik aniqlash
+    port = int(os.environ.get("PORT", 8080))
+    app_flask.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
+    t.daemon = True  # Asosiy dastur to'xtasa, oqim ham to'xtaydi
     t.start()
 # --------------------------------------------
 
-# Bot token - BotFather dan olingan token
-BOT_TOKEN = "8948394212:AAF0QBMz4xg1pQCbgM4OU4K0MA3q3Aa6asI"
+# Bot token - Xavfsizlik uchun muhit o'zgaruvchisidan olinadi
+# Agar platformangizda (masalan, Render yoki Replit) 'BOT_TOKEN' ni sozlasangiz, avtomatik oladi.
+# Aks holda quyidagi qatorga tokeningizni yozing: BOT_TOKEN = "SIZNING_TOKENINGIZ"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8948394212:AAF0QBMz4xg1pQCbgM4OU4K0MA3q3Aa6asI")
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # So'zlar ro'yxati (kategoriyalar bo'yicha)
@@ -110,6 +119,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Salom, {user.first_name}! 👋\n\n🇬🇧 *Ingliz tili o'rganish botiga xush kelibsiz!*\n\nQaysi biri bilan boshlaysiz? 👇"
+    
     if update.message:
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     else:
@@ -157,7 +167,8 @@ async def word_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     all_words = []
-    for words in WORDS.values(): all_words.extend(words)
+    for words in WORDS.values(): 
+        all_words.extend(words)
     correct = random.choice(all_words)
     wrong_choices = random.sample([w for w in all_words if w["en"] != correct["en"]], 3)
     all_choices = [correct] + wrong_choices
@@ -174,7 +185,9 @@ async def check_word_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chosen = query.data.replace("word_ans_", "")
     user = get_user(query.from_user.id)
     quiz = user.get("current_quiz")
-    if not quiz: await start(update, context); return
+    if not quiz: 
+        await start(update, context)
+        return
     correct = quiz["correct"]
     user["total_questions"] = user.get("total_questions", 0) + 1
     if chosen == correct:
@@ -206,7 +219,9 @@ async def check_grammar_answer(update: Update, context: ContextTypes.DEFAULT_TYP
     chosen = query.data.replace("gram_ans_", "")
     user = get_user(query.from_user.id)
     quiz = user.get("current_quiz")
-    if not quiz: await start(update, context); return
+    if not quiz: 
+        await start(update, context)
+        return
     correct, explanation = quiz["correct"], quiz.get("explanation", "")
     user["total_questions"] = user.get("total_questions", 0) + 1
     if chosen == correct:
@@ -233,13 +248,16 @@ async def my_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"📊 *Sizning natijalaringiz*\n\n{medal} Daraja: {'Boshlang\'ich' if total < 10 else 'O\'rta' if total < 30 else 'Yuqori'}\n\n✅ To'g'ri javoblar: *{correct}*\n❌ Xato javoblar: *{total - correct}*\n📝 Jami savollar: *{total}*\n🎯 Aniqlik: *{accuracy}%*\n\n💬 {comment}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query; await query.answer()
+    query = update.callback_query
+    await query.answer()
     user_data[query.from_user.id] = {"score": 0, "total_questions": 0, "correct_answers": 0, "learned_words": [], "current_quiz": None}
     await query.edit_message_text("✅ Natijalaringiz tozalandi! Yangi boshlang! 💪", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]))
 
 async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query; await query.answer()
-    await query.edit_message_text("ℹ️ *Yordam*\n\n🤖 Bu bot ingliz tilini o'rganishga yordam beradi!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]], parse_mode="Markdown"))
+    query = update.callback_query
+    await query.answer()
+    # parse_mode tugmalarga emas, edit_message_text ga tegishli bo'lishi kerak edi (to'g'rilandi)
+    await query.edit_message_text("ℹ️ *Yordam*\n\n🤖 Bu bot ingliz tilini o'rganishga yordam beradi!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]), parse_mode="Markdown")
 
 async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
