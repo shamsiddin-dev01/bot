@@ -1,6 +1,7 @@
 import os
 import logging
 import random
+import asyncio  # Xatolikni tuzatish uchun qo'shildi
 from threading import Thread
 from flask import Flask  # UptimeRobot uchun
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -17,19 +18,15 @@ def home():
     return "Bot tirik va ishlamoqda!"
 
 def run():
-    # Render, Replit yoki boshqa hostinglar uchun portni avtomatik aniqlash
     port = int(os.environ.get("PORT", 8080))
     app_flask.run(host='0.0.0.0', port=port)
 
 def keep_alive():
     t = Thread(target=run)
-    t.daemon = True  # Asosiy dastur to'xtasa, oqim ham to'xtaydi
+    t.daemon = True
     t.start()
 # --------------------------------------------
 
-# Bot token - Xavfsizlik uchun muhit o'zgaruvchisidan olinadi
-# Agar platformangizda (masalan, Render yoki Replit) 'BOT_TOKEN' ni sozlasangiz, avtomatik oladi.
-# Aks holda quyidagi qatorga tokeningizni yozing: BOT_TOKEN = "SIZNING_TOKENINGIZ"
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8948394212:AAF0QBMz4xg1pQCbgM4OU4K0MA3q3Aa6asI")
 
 logging.basicConfig(
@@ -38,7 +35,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# So'zlar ro'yxati (kategoriyalar bo'yicha)
+# So'zlar va testlar ma'lumotlar bazasi (O'zgarishsiz qoldi)
 WORDS = {
     "Kundalik hayot": [
         {"uz": "non", "en": "bread", "example": "I eat bread every morning."},
@@ -256,7 +253,6 @@ async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    # parse_mode tugmalarga emas, edit_message_text ga tegishli bo'lishi kerak edi (to'g'rilandi)
     await query.edit_message_text("ℹ️ *Yordam*\n\n🤖 Bu bot ingliz tilini o'rganishga yordam beradi!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]), parse_mode="Markdown")
 
 async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -265,12 +261,16 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot bilan faqat tugmalar orqali muloqot qiling! 👇\n/start ni bosing", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]))
 
-def main():
-    # --- KO'TARIB TURUVCHI FUNKSIYANI ISHGA TUSHIRAMIZ ---
+
+# --- ASINXRON MAIN FUNKSIYA (Xatolik tuzatilgan qismi) ---
+async def main():
+    # Kichik veb serverni alohida oqimda ko'taramiz
     keep_alive()
     
+    # Bot ilovasini quramiz
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # Hendlerlarni qo'shamiz
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", main_menu))
     app.add_handler(CallbackQueryHandler(learn_words, pattern="^learn_words$"))
@@ -286,8 +286,17 @@ def main():
     app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
     
-    print("✅ Bot ishga tushdi!")
-    app.run_polling(drop_pending_updates=True)
+    print("✅ Bot muvaffaqiyatli ishga tushdi!")
+    
+    # Asinxron ishga tushirish qismlari
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
+    
+    # Renderda bot o'chib qolmasligi uchun asinxron cheksiz sikl
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    main()
+    # Kodni asinxron ishga tushirish
+    asyncio.run(main())
