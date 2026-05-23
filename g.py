@@ -2,8 +2,8 @@ import os
 import logging
 import random
 import asyncio
+import sys
 from threading import Thread
-import nest_asyncio  # Yangi muhitlarda event loop xatoligini oldini olish uchun
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,21 +11,22 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes
 )
 
-# Render va Python 3.14+ uchun event loopni faollashtiramiz
-nest_asyncio.apply()
-
 # --- UPTIME ROBOT UCHUN KICHIK VEB SERVER ---
+# Nomini 'app_flask' qildik, botning 'app' obyekti bilan urishmasligi uchun
 app_flask = Flask('')
 
 @app_flask.route('/')
 def home():
-    return "Bot tirik va ishlamoqda!"
+    return "Bot tirik va ishlamoqda! 🚀"
 
 def run():
     # Render taqdim etadigan portni olamiz
     port = int(os.environ.get("PORT", 10000))
-    # Werkzeug serverini asinxron oqimga xalaqit bermasligi uchun threaded=True qilamiz
-    app_flask.run(host='0.0.0.0', port=port, threaded=True)
+    try:
+        # use_reloader=False Render'da qayta yuklanib xato bermasligi uchun shart
+        app_flask.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    except Exception as e:
+        print(f"Flask serverda xatolik: {e}")
 
 def keep_alive():
     t = Thread(target=run)
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # So'zlar ro'yxati (kategoriyalar bo'yicha)
 WORDS = {
-    "Kundalik hayot": [
+    "Interfaol olam": [
         {"uz": "non", "en": "bread", "example": "I eat bread every morning."},
         {"uz": "suv", "en": "water", "example": "Please give me some water."},
         {"uz": "uy", "en": "house", "example": "This is my house."},
@@ -267,16 +268,10 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot bilan faqat tugmalar orqali muloqot qiling! 👇\n/start ni bosing", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]))
 
-# --- TUZATILGAN RUN_POLLING INTEGRATSIYASI ---
-def main():
-    # Kichik veb serverni alohida oqimda ko'taramiz
-    keep_alive()
-    
-    # Asosiy loop (sikl)ni Render/Python muhitiga moslab yaratamiz
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    # Bot ilovasini quramiz
+
+# --- TUZATILGAN ASINXRON ISHGA TUSHIRISH QISMI ---
+async def main_async():
+    """Botni yangi asinxron event loop ichida xavfsiz boshqarish"""
     app = Application.builder().token(BOT_TOKEN).build()
     
     # Hendlerlarni qo'shamiz
@@ -295,69 +290,13 @@ def main():
     app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
     
-    print("✅ Bot muvaffaqiyatli ishga tushdi!")
-    
-    # run_polling endi xatosiz yangi siklda ishlaydi
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-
-
-    import asyncio
-import threading
-import sys
-import logging
-from flask import Flask
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-
-# 1. LOGGING (Serverda xatoliklarni kuzatish uchun)
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# 2. FLASK SOZLAMALARI (Render portni eshitishi va o'chib qolmasligi uchun)
-# Nomini 'flask_app' qildik, botning 'app' obyekti bilan urishmasligi uchun
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def home():
-    return "Bot ishlamoqda... 🚀"
-
-def run_flask():
-    """Flask'ni Render portida (10000) alohida oqimda ishga tushirish"""
-    try:
-        # Render avtomat port beradi yoki logingizdagi 10000 portdan foydalanadi
-        flask_app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False)
-    except Exception as e:
-        logger.error(f"Flask serverda xatolik: {e}")
-
-# 3. TELEGRAM BOT BUYRUQLARI (Handlers)
-# Bu yerga o'zingizning eski kodingizdagi funksiyalarni joylashtirishingiz mumkin
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/start buyrug'i kelganda javob berish"""
-    await update.message.reply_text("Assalomu alaykum! Bot muvaffaqiyatli ishga tushdi. 🤖")
-
-# 4. BOT OB'EKTINI YARATISH
-# BOT_TOKEN o'rniga o'zingizning haqiqiy tokeningizni yozing
-BOT_TOKEN = "SESH_YERGA_BOT_TOKENINI_YOZING"
-app = Application.builder().token(BOT_TOKEN).build()
-
-# Buyruqlarni ro'yxatga olish
-app.add_handler(CommandHandler("start", start_command))
-
-# 5. ASINXRON ISHGA TUSHIRISH (Python 3.14 xatoligini tuzatuvchi qism)
-async def main_async():
-    """Botni yangi asinxron event loop ichida ishga tushirish va ushlab turish"""
+    # Asinxron ishga tushirish (Python 3.14 xatoligini to'liq yopadi)
     await app.initialize()
     await app.updater.start_polling(drop_pending_updates=True)
     await app.start()
     print("✅ Bot asinxron tarzda muvaffaqiyatli ishga tushdi!")
     
-    # Render server botni o'chirib qo'ymasligi uchun cheksiz kutish sikli
+    # Render o'chirib yubormasligi uchun fonda cheksiz ushlab turamiz
     try:
         while True:
             await asyncio.sleep(3600)
@@ -368,27 +307,25 @@ async def main_async():
         await app.shutdown()
 
 def main():
-    """Asosiy ishga tushirish nuqtasi"""
-    # Windows operatsion tizimi uchun xavfsizlik chorasi
+    """Asosiy yuklovchi funksiya"""
+    # 1. Kichik veb serverni alohida oqimda ko'taramiz
+    keep_alive()
+    print("🌍 Flask veb server fonda ishga tushdi...")
+    
+    # Windows muhiti tekshiruvi (xavfsizlik uchun)
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    # 1-QADAM: Flask serverni fonda (Thread ichida) ishga tushiramiz
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True  # Asosiy dastur yopilsa, Flask ham yopiladi
-    flask_thread.start()
-    print("🌍 Flask server fonda ishga tushirildi...")
-
-    # 2-QADAM: Toza asinxron event loop yaratamiz va botni yurgizamiz
+    
+    # 2. Yangi toza event loop yaratamiz va botni yurgizamiz
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     
     try:
         loop.run_until_complete(main_async())
     except KeyboardInterrupt:
-        print("Dastur to'xtatildi.")
+        print("Dastur foydalanuvchi tomonidan to'xtatildi.")
     finally:
         loop.close()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
