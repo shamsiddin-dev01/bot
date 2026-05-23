@@ -222,4 +222,4 @@ async def check_grammar_answer(update: Update, context: ContextTypes.DEFAULT_TYP
     user["total_questions"] = user.get("total_questions", 0) + 1
     if chosen == correct:
         user["correct_answers"] = user.get("correct_answers", 0) + 1
-        result_text, emoji = "✅
+        result_text, emoji = "✅"
