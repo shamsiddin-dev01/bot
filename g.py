@@ -12,26 +12,20 @@ from telegram.ext import (
 )
 
 # --- UPTIME ROBOT UCHUN KICHIK VEB SERVER ---
-# Nomini 'app_flask' qildik, botning 'app' obyekti bilan urishmasligi uchun
 app_flask = Flask('')
 
 @app_flask.route('/')
 def home():
     return "Bot tirik va ishlamoqda! 🚀"
 
-def run():
-    # Render taqdim etadigan portni olamiz
-    port = int(os.environ.get("PORT", 10000))
-    try:
-        # use_reloader=False Render'da qayta yuklanib xato bermasligi uchun shart
-        app_flask.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-    except Exception as e:
-        print(f"Flask serverda xatolik: {e}")
-
 def keep_alive():
+    port = int(os.environ.get("PORT", 10000))
+    def run():
+        app_flask.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
     t = Thread(target=run)
     t.daemon = True
     t.start()
+    print("🌍 Flask veb server fonda ishga tushdi...")
 # --------------------------------------------
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8948394212:AAF0QBMz4xg1pQCbgM4OU4K0MA3q3Aa6asI")
@@ -42,7 +36,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# So'zlar ro'yxati (kategoriyalar bo'yicha)
 WORDS = {
     "Interfaol olam": [
         {"uz": "non", "en": "bread", "example": "I eat bread every morning."},
@@ -123,7 +116,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Salom, {user.first_name}! 👋\n\n🇬🇧 *Ingliz tili o'rganish botiga xush kelibsiz!*\n\nQaysi biri bilan boshlaysiz? 👇"
-    
     if update.message:
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     else:
@@ -171,7 +163,7 @@ async def word_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     all_words = []
-    for words in WORDS.values(): 
+    for words in WORDS.values():
         all_words.extend(words)
     correct = random.choice(all_words)
     wrong_choices = random.sample([w for w in all_words if w["en"] != correct["en"]], 3)
@@ -189,7 +181,7 @@ async def check_word_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chosen = query.data.replace("word_ans_", "")
     user = get_user(query.from_user.id)
     quiz = user.get("current_quiz")
-    if not quiz: 
+    if not quiz:
         await start(update, context)
         return
     correct = quiz["correct"]
@@ -223,109 +215,11 @@ async def check_grammar_answer(update: Update, context: ContextTypes.DEFAULT_TYP
     chosen = query.data.replace("gram_ans_", "")
     user = get_user(query.from_user.id)
     quiz = user.get("current_quiz")
-    if not quiz: 
+    if not quiz:
         await start(update, context)
         return
     correct, explanation = quiz["correct"], quiz.get("explanation", "")
     user["total_questions"] = user.get("total_questions", 0) + 1
     if chosen == correct:
         user["correct_answers"] = user.get("correct_answers", 0) + 1
-        result_text, emoji = "✅ *To'g'ri!* Zo'r! 🎉", "🎊"
-    else:
-        result_text, emoji = f"❌ *Noto'g'ri!*\nTo'g'ri javob: *{correct}*", "😔"
-    accuracy = round(user["correct_answers"] / user["total_questions"] * 100) if user["total_questions"] > 0 else 0
-    keyboard = [[InlineKeyboardButton("➡️ Keyingi grammar savol", callback_data="grammar_test")], [InlineKeyboardButton("📊 Natijalarim", callback_data="my_stats")], [InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]
-    await query.edit_message_text(f"{emoji} {result_text}\n\n💡 *Izoh:* {explanation}\n\n📊 Sizning natijangiz: {user['correct_answers']}/{user['total_questions']} ({accuracy}%)", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-async def my_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user = get_user(query.from_user.id)
-    total, correct = user.get("total_questions", 0), user.get("correct_answers", 0)
-    accuracy = round(correct / total * 100) if total > 0 else 0
-    if accuracy >= 80: medal, comment = "🥇", "Ajoyib! Siz juda yaxshi o'qiyapsiz!"
-    elif accuracy >= 60: medal, comment = "🥈", "Yaxshi! Davom eting!"
-    elif accuracy >= 40: medal, comment = "🥉", "O'rta daraja. Ko'proq mashq qiling!"
-    elif total == 0: medal, comment = "📚", "Hali test ishlamadingiz. Boshlang!"
-    else: medal, comment = "💪", "Qiyin ekan, lekin davom eting!"
-    keyboard = [[InlineKeyboardButton("🔄 Natijalarni qayta boshlash", callback_data="reset_stats")], [InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]
-    await query.edit_message_text(f"📊 *Sizning natijalaringiz*\n\n{medal} Daraja: {'Boshlang\'ich' if total < 10 else 'O\'rta' if total < 30 else 'Yuqori'}\n\n✅ To'g'ri javoblar: *{correct}*\n❌ Xato javoblar: *{total - correct}*\n📝 Jami savollar: *{total}*\n🎯 Aniqlik: *{accuracy}%*\n\n💬 {comment}", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-async def reset_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_data[query.from_user.id] = {"score": 0, "total_questions": 0, "correct_answers": 0, "learned_words": [], "current_quiz": None}
-    await query.edit_message_text("✅ Natijalaringiz tozalandi! Yangi boshlang! 💪", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]))
-
-async def help_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("ℹ️ *Yordam*\n\n🤖 Bu bot ingliz tilini o'rganishga yordam beradi!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]), parse_mode="Markdown")
-
-async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await start(update, context)
-
-async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot bilan faqat tugmalar orqali muloqot qiling! 👇\n/start ni bosing", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Bosh menyu", callback_data="main_menu")]]))
-
-
-# --- TUZATILGAN ASINXRON ISHGA TUSHIRISH QISMI ---
-async def main_async():
-    """Botni yangi asinxron event loop ichida xavfsiz boshqarish"""
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    # Hendlerlarni qo'shamiz
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", main_menu))
-    app.add_handler(CallbackQueryHandler(learn_words, pattern="^learn_words$"))
-    app.add_handler(CallbackQueryHandler(show_category, pattern="^cat_"))
-    app.add_handler(CallbackQueryHandler(quiz_category, pattern="^quiz_cat_"))
-    app.add_handler(CallbackQueryHandler(word_test, pattern="^word_test$"))
-    app.add_handler(CallbackQueryHandler(check_word_answer, pattern="^word_ans_"))
-    app.add_handler(CallbackQueryHandler(grammar_test, pattern="^grammar_test$"))
-    app.add_handler(CallbackQueryHandler(check_grammar_answer, pattern="^gram_ans_"))
-    app.add_handler(CallbackQueryHandler(my_stats, pattern="^my_stats$"))
-    app.add_handler(CallbackQueryHandler(reset_stats, pattern="^reset_stats$"))
-    app.add_handler(CallbackQueryHandler(help_menu, pattern="^help$"))
-    app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
-    
-    # Asinxron ishga tushirish (Python 3.14 xatoligini to'liq yopadi)
-    await app.initialize()
-    await app.updater.start_polling(drop_pending_updates=True)
-    await app.start()
-    print("✅ Bot asinxron tarzda muvaffaqiyatli ishga tushdi!")
-    
-    # Render o'chirib yubormasligi uchun fonda cheksiz ushlab turamiz
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, SystemExit):
-        print("Bot to'xtatilmoqda...")
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
-
-def main():
-    """Asosiy yuklovchi funksiya"""
-    # 1. Kichik veb serverni alohida oqimda ko'taramiz
-    keep_alive()
-    print("🌍 Flask veb server fonda ishga tushdi...")
-    
-    # Windows muhiti tekshiruvi (xavfsizlik uchun)
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    # 2. Yangi toza event loop yaratamiz va botni yurgizamiz
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    try:
-        loop.run_until_complete(main_async())
-    except KeyboardInterrupt:
-        print("Dastur foydalanuvchi tomonidan to'xtatildi.")
-    finally:
-        loop.close()
-
-if __name__ == "__main__":
-    main()
+        result_text, emoji = "✅
